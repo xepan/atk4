@@ -1,5 +1,6 @@
 {
-    "name": "atk4/atk4",
+    "name": "xepan/atk4",
+    "description": "atk4/atk4 fork",
     "type": "library",
     "version": "4.3.2",
     "license": "MIT",
