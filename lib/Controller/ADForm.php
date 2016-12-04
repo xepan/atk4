@@ -1,27 +1,25 @@
 <?php
 /**
- * Connects regular form with a model and imports some fields. It also
- * binds action on form->update(), which will now force model to be updated.
+ * Connects regular form with a Agile Data model and imports some fields.
+ * It also binds action on form->update(), which will now force model to be updated.
  *
  * In most cases the following use is sufficient
  * $form->setModel('SomeModel');
  *
  * If you want to import fields from multiple models, you can use this:
- *  $ctl = $form->importFields($model,array('name','surname');
+ *  $ctl = $form->importFields($model, array('name', 'surname');
  *
  * and if you want to use your own class based on this one, syntax is:
- *  $ctl = $form->add('Controller_MVCForm_Derived')->importFields($model,array('name','surname'));
- *
+ *  $ctl = $form->add('Controller_MVCForm_Derived')
+ *              ->importFields($model, array('name', 'surname'));
  *
  * You can subsequently call importField() to add additional fields such as:
- *
  *  $form_field = $ctl->importField('age');
- *
  * which will return newly added form field.
  */
-class Controller_MVCForm extends AbstractController
+class Controller_ADForm extends AbstractController
 {
-    /** @var Model */
+    /** @var \atk4\data\Model */
     public $model = null;
 
     /** @var Form */
@@ -43,12 +41,15 @@ class Controller_MVCForm extends AbstractController
         'string' => 'Line',
         'text' => 'Text',
         'int' => 'Number',
+        'integer' => 'Number',
         'numeric' => 'Number',
         'money' => 'Money',
         'real' => 'Number',
-        'date' => 'DatePicker',
-        'datetime' => 'DatePicker',
+        'float' => 'Number',
+        'date' => 'ADDatePicker',
+        'datetime' => 'ADDateTimePicker',
         'daytime' => 'Time',
+        'time' => 'Time',
         'boolean' => 'Checkbox',
         'reference' => 'Readonly',
         'reference_id' => 'DropDown',
@@ -58,6 +59,9 @@ class Controller_MVCForm extends AbstractController
         'readonly' => 'Readonly',
         'image' => 'Image',
         'file' => 'Upload',
+        'array' => 'JSONArray',
+        'struct' => 'JSON',  // deprecated, used in older versions of AD
+        'object' => 'JSON',
     );
 
     /**
@@ -73,12 +77,25 @@ class Controller_MVCForm extends AbstractController
 
 
     /**
+     * Initialization.
+     */
+    public function init()
+    {
+        parent::init();
+
+        if (! $this->owner->model instanceof \atk4\data\Model) {
+            throw $this->exception('Controller_ADForm can only be used with Agile Data \atk4\data\Model models');
+        }
+    }
+
+    /**
      * Import model fields in form.
      *
      * @param array|string|bool $fields
      */
     public function setActualFields($fields)
     {
+        /** @type \atk4\data\Model $this->owner->model */
         $this->importFields($this->owner->model, $fields);
     }
 
@@ -88,7 +105,7 @@ class Controller_MVCForm extends AbstractController
      *
      * Use $fields === false if you want to associate form with model, but don't create form fields.
      *
-     * @param Model $model
+     * @param \atk4\data\Model $model
      * @param array|string|bool $fields
      *
      * @return void|$this
@@ -103,11 +120,24 @@ class Controller_MVCForm extends AbstractController
         }
 
         if (!$fields) {
-            $fields = 'editable';
+            if ($model->only_fields) {
+                $fields = $model->only_fields;
+            } else {
+                $fields = [];
+                // get all field-elements
+                foreach ($model->elements as $field => $f_object) {
+                    if ($f_object instanceof \atk4\data\Field
+                        && $f_object->isEditable()
+                        && !$f_object->isHidden()
+                    ) {
+                        $fields[] = $field;
+                    }
+                }
+            }
         }
+
         if (!is_array($fields)) {
-            // note: $fields parameter is only useful if model is SQL_Model
-            $fields = $model->getActualFields($fields);
+            $fields = [$fields];
         }
 
         // import fields one by one
@@ -136,63 +166,66 @@ class Controller_MVCForm extends AbstractController
     public function importField($field, $field_name = null)
     {
         $field = $this->model->hasElement($field);
-        if (!$field) {
-            return;
-        }
-        /** @type Field $field */
-        if (!$field->editable()) {
+        /** @type \atk4\data\Field $field */
+
+        if (!$field || !$field->isEditable() || $field->isHidden()) {
             return;
         }
 
         if ($field_name === null) {
             $field_name = $this->_unique($this->owner->elements, $field->short_name);
         }
-        $field_type = $this->getFieldType($field);
-        $field_caption = $field->caption();
-
         $this->field_associations[$field_name] = $field;
 
-        if ($field->listData() || $field instanceof Field_Reference) {
-            if ($field_type == 'Line') {
-                $field_type = 'DropDown';
-            }
-        }
+        $field_type = $this->getFieldType($field);
+        $field_caption = isset($field->ui['caption']) ? $field->ui['caption'] : null;
 
+        // add form field
         $form_field = $this->owner->addField($field_type, $field_name, $field_caption);
         $form_field->set($field->get());
 
-        $field_placeholder = $field->placeholder() ?: $field->emptyText() ?: null;
-        if ($field_placeholder) {
-            $form_field->setAttr('placeholder', $field_placeholder);
+        // set model for hasOne field
+        if ($ref_field = $this->model->hasRef($field->short_name)) {
+            $form_field->setModel($ref_field->getModel());
         }
 
-        if ($field->hint()) {
-            $form_field->setFieldHint($field->hint());
+        // set model for enum field
+        if (isset($field->enum)) {
+
+            $list = isset($field->ui['valueList'])
+                ? $field->ui['valueList']
+                : array_combine($field->enum, $field->enum);
+
+            if ($form_field instanceof Form_Field_Checkbox) {
+                $list = array_reverse($list);
+            }
+
+
+            $form_field->setValueList($list);
         }
 
-        if ($field->listData()) {
-            /** @type Form_Field_ValueList $form_field */
-            $a = $field->listData();
-            $form_field->setValueList($a);
-        }
-        if ($msg = $field->mandatory()) {
-            $form_field->validateNotNULL($msg);
+        // field value is mandatory
+        if ($field->mandatory) {
+            $form_field->validateNotNULL($field->mandatory);
         }
 
-        if ($field instanceof Field_Reference || $field_type == 'reference') {
-            $form_field->setModel($field->getModel());
+        // form field placeholder
+        $placeholder = isset($field->ui['placeholder']) ? $field->ui['placeholder'] : /*$field->emptyText() ?:*/ null;
+        if ($placeholder) {
+            $form_field->setAttr('placeholder', $placeholder);
         }
-        if ($field->theModel) {
-            $form_field->setModel($field->theModel);
+
+        // form field hint
+        if (isset($field->ui['hint'])) {
+            $form_field->setFieldHint($field->ui['hint']);
         }
-        if ($form_field instanceof Form_Field_ValueList && !$field->mandatory()) {
+
+        // set empty text option for dropdown type form fields if model field is not mandatory
+        if ($form_field instanceof Form_Field_ValueList && !$field->mandatory) {
             /** @type string $text */
-            $text = $field->emptyText();
-            $form_field->setEmptyText($text);
-        }
-
-        if ($field->onField()) {
-            call_user_func($field->onField(), $form_field);
+            //$text = $field->emptyText();
+            //$form_field->setEmptyText($text);
+            $form_field->setEmptyText('- no value -');
         }
 
         return $form_field;
@@ -210,7 +243,7 @@ class Controller_MVCForm extends AbstractController
     }
 
     /**
-     * Returns array of models model_name => Model used in this form.
+     * Returns array of models model_name => \atk4\data\Model used in this form.
      *
      * @return array
      */
@@ -224,9 +257,10 @@ class Controller_MVCForm extends AbstractController
          */
         foreach ($this->field_associations as $form_field => $model_field) {
             $v = $this->form->get($form_field);
+            $m = $model_field->owner;
             $model_field->set($v);
-            if (!isset($models[$model_field->owner->name])) {
-                $models[$model_field->owner->name] = $model_field->owner;
+            if (!isset($models[$m->name])) {
+                $models[$m->name] = $m;
             }
         }
 
@@ -238,32 +272,38 @@ class Controller_MVCForm extends AbstractController
      *
      * Redefine this method to add special handling of your own fields.
      *
-     * @param Field $field
+     * @param \atk4\data\Field $field
      *
      * @return string
      */
     public function getFieldType($field)
     {
-        // default form field type
         $type = 'Line';
 
-        // try to find associated form field type
-        if (isset($this->type_associations[$field->type()])) {
-            $type = $this->type_associations[$field->type()];
-        }
-        if ($field instanceof Field_Reference) {
-            $type = 'DropDown';
-        }
-
-        // if form field type explicitly set in model
-        if ($field->display()) {
-            $tmp = $field->display();
-            if (is_array($tmp)) {
+        // if form field type explicitly set in models UI properties
+        if (isset($field->ui['display'])) {
+            $tmp = $field->ui['display'];
+            if (isset($tmp['form'])) {
                 $tmp = $tmp['form'];
             }
-            if ($tmp) {
-                $type = $tmp;
+            if (is_string($tmp) && $tmp) {
+                return $tmp;
             }
+        }
+
+        // associate hasOne (Reference_One) fields with DropDown form field
+        if ($this->model->hasRef($field->short_name)) {
+            return 'DropDown';
+        }
+
+        // associate enum fields with DropDown form_field
+        if (isset($field->enum) && $field->type != 'boolean') {
+            return 'DropDown';
+        }
+
+        // try to find associated form field type
+        if (isset($this->type_associations[$field->type])) {
+            $type = $this->type_associations[$field->type];
         }
 
         return $type;

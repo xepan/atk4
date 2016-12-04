@@ -333,6 +333,8 @@ class Grid_Advanced extends Grid_Basic
         }
         if ($i instanceof DB_dsql) {
             $i->order($field, $desc);
+        } elseif ($i instanceof \atk4\data\Model) {
+            $i->setOrder($field, $desc);
         } elseif ($i instanceof SQL_Model) {
             $i->setOrder($field, $desc);
         } elseif ($i instanceof Model) {
@@ -697,7 +699,8 @@ class Grid_Advanced extends Grid_Basic
                     )
                 ).'" '.
             '/>'.
-            '<label for="'.$id.'">'.$this->current_row[$field].'</label>';
+            '<label for="'.$id.'" style="cursor:pointer;"><a class="atk-button-small">'.
+            $this->current_row[$field].'</a></label>';
     }
     // }}}
 
@@ -770,22 +773,6 @@ class Grid_Advanced extends Grid_Basic
     }
 
     /**
-     * Format field as money with 2 digit precision.
-     *
-     * @param string $field
-     */
-    public function format_money($field)
-    {
-        // use real number formatter
-        $this->format_real($field);
-
-        // negative values show in red color
-        if ($this->current_row[$field] < 0) {
-            $this->setTDParam($field, 'style/color', 'red');
-        }
-    }
-
-    /**
      * Initialize column as boolean.
      *
      * @param string $field
@@ -802,13 +789,42 @@ class Grid_Advanced extends Grid_Basic
      */
     public function format_boolean($field)
     {
-        if ($this->current_row[$field] && $this->current_row[$field] !== 'N') {
+        $value = $this->current_row[$field.'_original'];
+        $label = $this->current_row[$field];
+
+        if ($value === true || $value === 1 || $value === 'Y') {
             $this->current_row_html[$field] =
                 '<div align=center>'.
-                    '<i class="icon-check">'.$this->app->_('yes').'</i>'.
+                    '<i class="icon-check">'.($label!==$value ? $label : $this->app->_('yes')).'</i>'.
                 '</div>';
         } else {
             $this->current_row_html[$field] = '';
+            /*
+            $this->current_row_html[$field] =
+                '<div align=center>'.
+                    '<i class="icon-check-empty">'.($label!==$value ? $label : $this->app->_('no')).'</i>'.
+                '</div>';
+            */
+        }
+    }
+
+
+
+    /**
+     * Format field as money with 2 digit precision.
+     *
+     * @param string $field
+     */
+    public function format_money($field)
+    {
+        // use real number formatter
+        $this->format_real($field);
+
+        // negative values show in red color
+        if ($this->current_row[$field] < 0) {
+            $this->setTDParam($field, 'style/color', 'red');
+        } else {
+            $this->setTDParam($field, 'style/color', false);
         }
     }
 
@@ -825,6 +841,18 @@ class Grid_Advanced extends Grid_Basic
     }
 
     /**
+     * Format field by json encoding it.
+     *
+     * @param string $field
+     */
+    public function format_json($field)
+    {
+        if (!is_scalar($this->current_row[$field])) {
+            $this->current_row[$field] = json_encode($this->current_row[$field]);
+        }
+    }
+
+    /**
      * Format field as date.
      *
      * @param string $field
@@ -834,10 +862,17 @@ class Grid_Advanced extends Grid_Basic
         if (!$this->current_row[$field]) {
             $this->current_row[$field] = '-';
         } else {
-            $this->current_row[$field] = date(
-                $this->app->getConfig('locale/date', 'd/m/Y'),
-                strtotime($this->current_row[$field])
-            );
+            if (is_object($this->current_row[$field])) {
+                $this->current_row[$field] = $this->current_row[$field]->format(
+                    $this->app->getConfig('locale/date', 'd/m/Y')
+                );
+
+            } else {
+                $this->current_row[$field] = date(
+                    $this->app->getConfig('locale/date', 'd/m/Y'),
+                    strtotime($this->current_row[$field])
+                );
+            }
         }
     }
 
@@ -875,6 +910,8 @@ class Grid_Advanced extends Grid_Basic
                     $this->app->getConfig('locale/datetime', 'd/m/Y H:i:s'),
                     $d
                 );
+            } elseif ($d instanceof \DateTime) {
+                $this->current_row[$field] = $d->format($this->app->getConfig('locale/datetime', 'd/m/Y H:i:s'));
             } else {
                 $d = strtotime($d);
                 $this->current_row[$field] = $d

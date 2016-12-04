@@ -99,12 +99,19 @@ abstract class AbstractView extends AbstractObject
      *
      * @return AbstractModel object
      */
-    public function setModel($model, $actual_fields = UNDEFINED)
+    public function setModel($model, $actual_fields = null)
     {
         parent::setModel($model);
 
+        if ($this->model instanceof \atk4\data\Model) {
+            // Switch to Agile Data implementation
+            if (isset($this->default_controller)) {
+                $this->default_controller = str_replace('MVC', 'AD', $this->default_controller);
+            }
+        }
+
         // Some models will want default controller to be associated
-        if ($this->model->default_controller) {
+        if (isset($this->model->default_controller)) {
             $this->controller
                 = $this->model->setController($this->model->default_controller);
         }
@@ -126,6 +133,8 @@ abstract class AbstractView extends AbstractObject
         if ($this->model instanceof SQL_Model) {
             $this->dq = $this->model->_dsql();    // compatibility
         }
+
+        $this->hook('set-model', [$this->model, $actual_fields]);
 
         return $this->model;
     }
@@ -374,7 +383,13 @@ abstract class AbstractView extends AbstractObject
      */
     public function modelRender()
     {
-        $this->template->set($this->model->get());
+        if ($this->model instanceof \atk4\data\Model) {
+            $data = $this->model->persistence->typecastSaveRow($this->model, $this->model->get());
+        } else {
+            $data = $this->model->get();
+        }
+
+        $this->template->set($data);
     }
 
     /**

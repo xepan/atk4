@@ -329,8 +329,14 @@ class Logger extends AbstractController
             $this->print_r($e->more_info, '', '', '* ', "\n", ' '), 2, 'error');
         }
     }
-    public function caughtException($caller, $e)
+    public function caughtException($caller, $e, $last_exception = true)
     {
+
+        // compatibility with \atk4\core\Exception
+        if ($e instanceof \atk4\core\Exception) {
+            $e->more_info = $e->getParams();
+        }
+
         $this->logCaughtException($e);
         if (!$this->web_output) {
             echo $this->public_error_message;
@@ -376,27 +382,47 @@ class Logger extends AbstractController
                 $this->showRenderTree($e, $this->app);
             } catch (Exception $e) {
                 echo '<h1>Exception while trying to render tree:</h1>';
-                //unset($_GET[$htis->name.'_debug']);
+                //unset($_GET[$this->name.'_debug']);
                 //$this->app->caughtException($e);
             }
         }
 
         $o = '';
         $o .= '<h2>Application Error: '.htmlspecialchars($e->getMessage())."</h2>\n";
-        $o .= '<p><font color=red>'.get_class($e).', code: '.$e->getCode().'</font></p>';
-        if (@$e->more_info) {
-            $o .= '<p>Additional information:';
+        $o .= "<div style='color:red;font-weight:bold'>".get_class($e).', code: '.$e->getCode().'</div>';
+        if (isset($e->more_info)) {
+            $o .= '<b>Additional information:</b><br />';
+            $o .= "<div style='border: 1px solid black; padding: 3px; text-align: left; ".
+                "font-family: verdana; font-size: 10px;'>\n";
             $o .= $this->print_r($e->more_info, '<ul>', '</ul>', '<li>', '</li>', ' ');
-            $o .= '</p>';
+            $o .= '</div>';
         }
         if (method_exists($e, 'getMyFile')) {
-            $o .= '<p><font color=blue>'.$e->getMyFile().':'.$e->getMyLine().'</font></p>';
+            $o .= "<div style='color:blue'".$e->getMyFile().':'.$e->getMyLine().'</div>';
         }
 
-        if (method_exists($e, 'getMyTrace')) {
-            $o .= $this->backtrace(3, $e->getMyTrace());
-        } else {
-            $o .= $this->backtrace(@$e->shift, $e->getTrace());
+        $previous = isset($e->by_exception) ? $e->by_exception : ($e->getPrevious() ?: null);
+
+        // add stacktrace only for initial / first exception
+        if (!$previous) {
+            if (method_exists($e, 'getMyTrace')) {
+                $o .= $this->backtrace(null, $e->getMyTrace());
+            } else {
+                $o .= $this->backtrace(@$e->shift, $e->getTrace());
+            }
+        }
+
+        // recursively shows all previous exceptions
+        if ($previous) {
+            //$o .= '<h3>This error was triggered by the following error:</h3>';
+            ob_start();
+            $this->caughtException($caller, $previous, false);
+            $o .= ob_get_clean();
+        }
+
+        if ($last_exception) {
+            $o .= "<p>Note: To hide this information from your users, add \$config['logger']['web_output']=false ".
+                "to your config.php file. Refer to documentation on 'Logger' for alternative logging options</p>";
         }
 
         if ((isset($_POST['ajax_submit'])
@@ -404,30 +430,38 @@ class Logger extends AbstractController
             && !$_GET['cut_page']
             && !$_GET['cut_object']
             && !$_GET['cut_region']
+            && $last_exception
         ) {
             $this->displayError($o);
         } else {
             echo $o;
         }
 
-        if (@$e->by_exception) {
-            echo '<h3>This error was triggered by the following error:</h3>';
-            $this->caughtException($caller, $e->by_exception);
+        if ($last_exception) {
+            exit;
         }
-
-        echo "<p>Note: To hide this information from your users, add \$config['logger']['web_output']=false to your ".
-            "config.php file. Refer to documentation on 'Logger' for alternative logging options</p>";
-
-        exit;
     }
+
     public function displayError($o)
     {
         $this->app->js()->univ()->dialogError($o, array('width' => 900, 'height' => 500))->execute();
     }
-    public function print_r($key, $gs, $ge, $ls, $le, $ind = ' ')
+    /**
+     * Returns HTML formatted $key array.
+     *
+     * @param mixed $key
+     * @param string $gs List start tag
+     * @param string $ge List end tag
+     * @param string $ls Item start tag
+     * @param string $le Item end tag
+     * @param string $ind Identation
+     *
+     * @return string
+     */
+    public function print_r($key, $gs, $ge, $ls, $le, $ind = ' ', $max_depth = 6)
     {
         $o = '';
-        if (strlen($ind) > 3) {
+        if (strlen($ind) > $max_depth) {
             return;
         }
         if (is_array($key)) {
@@ -438,6 +472,11 @@ class Logger extends AbstractController
             $o .= $ge;
         } elseif ($key instanceof Closure) {
             $o .= '[closure]';
+        } elseif (is_object($key)) {
+            $o .= 'object('.get_class($key).'): ';
+            if (method_exists($key, '__debugInfo')) {
+                $o .= $this->print_r($key->__debugInfo(), $gs, $ge, $ls, $le, $ind.' ').$le;
+            }
         } else {
             $o .= $gs ? htmlspecialchars($key) : $key;
         }
@@ -633,12 +672,14 @@ class Logger extends AbstractController
         // TODO: allow extending backtrace option, so that
         $output .= "<b>Stack trace:</b><br />".
             "<table style='border: 1px solid black; padding: 3px; text-align: left; font-family: verdana; ".
-            "font-size: 10px' width=100% cellspacing=0 cellpadding=0 border=0>\n";
-        $output .= "<tr><th align='right'>File</th><th>&nbsp;</th><th>Object Name</th><th>Stack Trace</th></tr>";
+            "font-size: 10px' width=100% cellspacing=0 cellpadding=0 border=0>\n".
+            "<tr><th align='right'>File</th><th>&nbsp;#&nbsp;</th><th>Object Name</th><th>Stack Trace</th></tr>\n";
         if (!isset($backtrace)) {
             $backtrace = debug_backtrace();
         }
-        $sh -= 2;
+        if ($sh) {
+            $sh -= 2;
+        }
 
         $n = 0;
         foreach ($backtrace as $bt) {
@@ -680,21 +721,30 @@ class Logger extends AbstractController
                 }
             }
 
-            if (($sh == null && strpos($bt['file'], '/atk4/lib/') === false)
+            $ds = DIRECTORY_SEPARATOR;
+            if (($sh == null
+                && (
+                    strpos($bt['file'], $ds.'atk4'.$ds.'lib'.$ds) === false &&
+                    strpos($bt['file'], $ds.'data'.$ds.'src'.$ds) === false &&
+                    strpos($bt['file'], $ds.'core'.$ds.'src'.$ds) === false &&
+                    strpos($bt['file'], $ds.'dsql'.$ds.'src'.$ds) === false && $bt['file'] != null
+                ))
                 || (!is_int($sh) && $bt['function'] == $sh)
             ) {
                 $sh = $n;
             }
 
-            $output .= '<tr><td valign=top align=right><font color='.($sh == $n ? 'red' : 'blue').'>'.
-                htmlspecialchars(dirname($bt['file'])).'/'.
-                '<b>'.htmlspecialchars(basename($bt['file'])).'</b></font></td>';
-            $output .= '<td valign=top nowrap><font color='.
-                ($sh == $n ? 'red' : 'blue').">:{$bt['line']}</font>&nbsp;</td>";
             $name = (!isset($bt['object']->name)) ? get_class($bt['object']) : $bt['object']->name;
-            $output .= '<td>'.($bt['object'] ? $name : '').'</td>';
-            $output .= '<td valign=top><font color='.($sh == $n ? 'red' : 'green').'>'.get_class($bt['object']).
-                "{$bt['type']}<b>{$bt['function']}</b>($args)</font></td></tr>\n";
+            $output .= '<tr>'.
+                '<td valign="top" align="right"><font color="'.($sh == $n ? 'red' : 'blue').'">'.
+                    htmlspecialchars(dirname($bt['file'])).'/'.
+                    '<b>'.htmlspecialchars(basename($bt['file'])).'</b></font></td>'.
+                '<td valign="top" nowrap>'.
+                    '<font color="'.($sh == $n ? 'red' : 'blue').'">:'.$bt['line'].'</font>&nbsp;</td>'.
+                '<td>'.($bt['object'] ? $name : '').'</td>'.
+                '<td valign="top"><font color="'.($sh == $n ? 'red' : 'green').'">'.
+                    ($bt['object'] ? get_class($bt['object']) : '').
+                    $bt['type'].'<b>'.$bt['function'].'</b>('.$args.')</font></td></tr>'."\n";
         }
         $output .= "</table></div>\n";
 

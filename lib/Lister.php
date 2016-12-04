@@ -137,7 +137,7 @@ class Lister extends View implements ArrayAccess
     {
         $iter = $this->getIterator();
         foreach ($iter as $this->current_id => $this->current_row) {
-            if ($this->current_row instanceof Model) {
+            if ($this->current_row instanceof Model || $this->current_row instanceof \atk4\data\Model) {
                 /** @type Model $this->current_row */
                 $this->current_row = $this->current_row->get();
             } elseif (!is_array($this->current_row) && !($this->current_row instanceof ArrayAccess)) {
@@ -169,8 +169,14 @@ class Lister extends View implements ArrayAccess
             if (isset($this->current_row_html[$key])) {
                 continue;
             }
+
+            if ($val instanceof DateTime) {
+                $val = $val->format($this->app->getConfig('locale/datetime', 'Y-m-d H:i:s'));
+            }
+
             $template->trySet($key, $val);
         }
+
         $template->setHTML($this->current_row_html);
         $template->trySet('id', $this->current_id);
         $o = $template->render();

@@ -68,7 +68,7 @@ class App_Web extends App_CLI
     // {{{ Start-up
     public function __construct($realm = null, $skin = 'default', $options = array())
     {
-        $this->start_time = time() + microtime();
+        $this->start_time = time() + preg_replace('/ .*/','', microtime());
 
         $this->skin = $skin;
         try {
@@ -529,7 +529,7 @@ class App_Web extends App_CLI
             $t->eachTag($tag = 'public', array($this, '_locatePublic'));
             $t->eachTag($tag = 'js', array($this, '_locateJS'));
             $t->eachTag($tag = 'css', array($this, '_locateCSS'));
-            $t->eachTag($tag = 'page', array($this, '_locatePage'));
+            $t->eachTag($tag = 'page', array($this, 'getBaseURL'));
         } catch (BaseException $e) {
             throw $e
                 ->addMoreInfo('processing_tag', $tag)

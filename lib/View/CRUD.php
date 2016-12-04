@@ -273,8 +273,8 @@ class View_CRUD extends View
     {
         $model = parent::setModel($model);
 
-        if ($this->entity_name === null) {
-            if ($model->caption === null) {
+        if (!isset($this->entity_name)) {
+            if (!isset($model->caption)) {
 
                 // Calculates entity name
                 $class = get_class($this->model);
@@ -645,7 +645,7 @@ class View_CRUD extends View
             );
 
         if ($this->entity_name !== false) {
-            $this->add_button->setHTML('<i class="icon-plus"></i> Add '.htmlspecialchars($this->entity_name));
+            $this->add_button->setIcon('plus')->setHTML('Add '.htmlspecialchars($this->entity_name));
         }
     }
 
@@ -706,7 +706,7 @@ class View_CRUD extends View
     protected function formSubmit($form)
     {
         try {
-            $form->update();
+            $form->save();
             $self = $this;
             $this->app->addHook('pre-render', function () use ($self) {
                 $self->formSubmitSuccess()->execute();

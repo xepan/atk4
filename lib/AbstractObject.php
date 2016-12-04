@@ -295,15 +295,15 @@ abstract class AbstractObject
 
         if (is_object($class)) {
             // Object specified, just add the object, do not create anything
-            if (!($class instanceof self)) {
+            if (!($class instanceof self) && !(method_exists($class, 'init'))) {
                 throw $this->exception(
                     'You may only add objects based on AbstractObject'
                 );
             }
-            if (!$class->short_name) {
+            if (!isset($class->short_name)) {
                 $class->short_name = str_replace('\\', '_', strtolower(get_class($class)));
             }
-            if (!$class->app) {
+            if (!isset($class->app)) {
                 $class->app = $this->app;
                 $class->api = $this->app; // compatibility with ATK 4.2 and lower
             }
@@ -322,6 +322,11 @@ abstract class AbstractObject
                 if (!isset($this->template) || !$this->template) {
                     $class->initializeTemplate($template_spot, $template_branch);
                 }
+            }
+
+            if (!$class->_initialized) {
+                $this->app->hook('beforeObjectInit', array(&$class));
+                $class->init();
             }
 
             return $class;
@@ -504,6 +509,12 @@ abstract class AbstractObject
      */
     public function setModel($model)
     {
+        // in case of Agile Data model - don't add it to object.
+        // Agile Data Model owner is Agile Data Persistance and so be it.
+        if ($model instanceof \atk4\data\Model) {
+            return $this->model = $model;
+        }
+
         $model = $this->app->normalizeClassName($model, 'Model');
         $this->model = $this->add($model);
 
@@ -636,7 +647,6 @@ abstract class AbstractObject
                 return $default;
             }
             $v = $this->add(unserialize($_SESSION['s'][$this->name][$key]));
-            $v->init();
 
             return $v;
         }
@@ -1122,7 +1132,9 @@ abstract class AbstractObject
 
             if (is_string($callable)) {
                 foreach ($this as $obj) {
-                    $obj->$callable();
+                    if ($obj->$callable() === false) {
+                        break;
+                    }
                 }
 
                 return $this;
@@ -1245,7 +1257,8 @@ abstract class AbstractObject
      */
     public function _shorten($desired)
     {
-        if (strlen($desired) > $this->app->max_name_length
+        if (isset($this->app->max_name_length)
+            && strlen($desired) > $this->app->max_name_length
             && $this->app->max_name_length !== false
         ) {
             $len = $this->app->max_name_length - 10;
@@ -1268,7 +1281,11 @@ abstract class AbstractObject
     private $_element_name_counts = array();
     public function _unique_element($desired = null)
     {
-        $postfix = @++$this->_element_name_counts[$desired];
+        if (!isset($this->_element_name_counts[$desired])) {
+            $postfix = $this->_element_name_counts[$desired] = 1;
+        } else {
+            $postfix = ++$this->_element_name_counts[$desired];
+        }
 
         return $desired.($postfix > 1 ? ('_'.$postfix) : '');
     }

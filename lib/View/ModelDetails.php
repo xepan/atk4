@@ -2,7 +2,7 @@
 /**
  * Shows contents of particular model records.
  */
-class View_ModelDetails extends Grid_Basic
+class View_ModelDetails extends Grid_Advanced
 {
     public $default_controller = null;
 
@@ -48,10 +48,12 @@ class View_ModelDetails extends Grid_Basic
         return parent::setSource($data);
     }
 
-    public function setModel($model, $actual_fields = UNDEFINED)
+    public function setModel($model, $actual_fields = null)
     {
-        $m = parent::setModel($model);
-        if ($actual_fields != UNDEFINED) {
+        $m = AbstractView::setModel($model);
+        $this->model = $m;
+        $this->default_controller = 'Controller_MVCGrid';
+        if ($actual_fields) {
             $m->setActualFields($actual_fields);
         }
 
@@ -63,7 +65,7 @@ class View_ModelDetails extends Grid_Basic
         parent::precacheTemplate();
         $this->row_t->set('tdparam_value', '');
     }
-    
+
     public function render()
     {
         if (!$this->source_set) {
@@ -76,7 +78,7 @@ class View_ModelDetails extends Grid_Basic
                 if (!$field) {
                     continue;
                 }
-                if ($field instanceof Field || $field instanceof Field_Base) {
+                if ($field instanceof Field || $field instanceof Field_Base || $field instanceof \atk4\data\Field) {
                     $data[] = array(
                         'id' => $key,
                         'name' => $field->caption(),

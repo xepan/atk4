@@ -94,16 +94,38 @@ class QuickSearch extends Filter
     public function postInit()
     {
         parent::postInit();
+
         if (!($v = trim($this->get('q')))) {
             return;
         }
 
-        if ($this->view->model->hasMethod('addConditionLike')) {
-            return $this->view->model->addConditionLike($v, $this->fields);
+        $m = $this->view->model;
+
+        // if model has method addConditionLike
+        if ($m->hasMethod('addConditionLike')) {
+            return $m->addConditionLike($v, $this->fields);
         }
 
-        if ($this->view->model && $this->view->model instanceof SQL_Model) {
-            $q = $this->view->model->_dsql();
+        // if it is Agile Data model
+        if ($m instanceof \atk4\data\Model) {
+
+            if (!$m->hasMethod('expr')) {
+                return $m;
+            }
+
+            $expr = [];
+            foreach ($this->fields as $field) {
+                $expr[] = 'lower({' . $field . '}) like lower([])';
+            }
+            $expr = '('.implode(' or ', $expr).')';
+            $expr = $m->expr($expr, array_fill(0, count($this->fields), '%'.$v.'%'));
+
+            return $m->addCondition($expr); // @todo should use having instead
+        }
+
+        // if it is ATK 4.3 model or any other data source
+        if ($m instanceof SQL_Model) {
+            $q = $m->_dsql();
         } else {
             $q = $this->view->dq;
         }

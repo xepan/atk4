@@ -102,6 +102,9 @@ class Grid_Basic extends CompleteLister
             $name = $formatters;
             $formatters = 'text';
         }
+        if ($formatters === null) {
+            $formatters = 'text';
+        }
 
         if ($descr === null) {
             $descr = ucwords(str_replace('_', ' ', $name));
@@ -239,7 +242,7 @@ class Grid_Basic extends CompleteLister
      * @param Model $model
      * @param array $fields
      */
-    public function importFields($model, $fields = UNDEFINED)
+    public function importFields($model, $fields = null)
     {
         /** @type Controller_MVCGrid $c */
         $c = $this->add($this->default_controller);
@@ -267,13 +270,22 @@ class Grid_Basic extends CompleteLister
     /**
      * Replace current formatter for field.
      *
-     * @param string $field
-     * @param mixed  $formatter
+     * @param string|array $field
+     * @param mixed        $formatter
      *
      * @return $this
      */
     public function setFormatter($field, $formatter, $options = null)
     {
+        // support for field names as array
+        if (is_array($field)) {
+            foreach ($field as $f) {
+                $this->setFormatter($f, $formatter, $options);
+            }
+
+            return $this;
+        }
+
         if (!isset($this->columns[$field])) {
             throw new BaseException('Cannot format nonexistant field '.$field);
         }
@@ -288,17 +300,33 @@ class Grid_Basic extends CompleteLister
     /**
      * Add extra formatter to existing field.
      *
-     * @param string $field
-     * @param mixed  $formatter
-     * @param array  $options
+     * @param string|array $field
+     * @param mixed        $formatter
+     * @param array        $options
      *
      * @return $this || Controller_Grid_Format
      */
     public function addFormatter($field, $formatter, $options = null)
     {
+        // support for field names as array
+        if (is_array($field)) {
+            foreach ($field as $f) {
+                $this->setFormatter($f, $formatter, $options);
+            }
+
+            return $this;
+        }
+
         if (!isset($this->columns[$field])) {
             throw new BaseException('Cannot format nonexistant field '.$field);
         }
+
+        if ($formatter instanceof Closure) {
+            $m_name = uniqid();
+            $this->addMethod('format_'.$m_name, $formatter);
+            $formatter = $m_name;
+        }
+
         if ($this->columns[$field]['type']) {
             $this->columns[$field]['type'] .= ','.$formatter;
         } else {
@@ -342,7 +370,6 @@ class Grid_Basic extends CompleteLister
     public function format_text($field)
     {
     }
-
     // }}}
 
     // {{{ Rendering
@@ -495,15 +522,28 @@ class Grid_Basic extends CompleteLister
         }
 
         foreach ($this->columns as $field => $column) {
-            if (is_array($this->current_row) || $this->current_row instanceof ArrayAccess) {
-                $this->current_row[$field.'_original'] = @$this->current_row[$field];
+            if ((is_array($this->current_row) || $this->current_row instanceof ArrayAccess)
+                && array_key_exists($field, $this->current_row)
+            ) {
+                $this->current_row[$field.'_original'] = $this->current_row[$field];
             }
 
             // if model field has listData structure, then get value instead of key
-            /** @type Field $f */
             if ($this->model && $f = $this->model->hasElement($field)) {
-                if ($f->type() !== 'boolean' && $values = $f->listData()) {
-                    $this->current_row[$field] = $values[$this->current_row[$field]];
+                $v = $this->current_row[$field];
+
+                if ($this->model instanceof \atk4\data\Model) {
+                    /** @type \atk4\data\Field $f */
+                    if (isset($f->enum) && $values = $f->enum) {
+                        $this->current_row[$field] = isset($f->ui['valueList'][$v])
+                            ? $f->ui['valueList'][$v]
+                            : $values[$v];
+                    }
+                } else {
+                    /** @type Field $f */
+                    if ($f->type() !== 'boolean' && $values = $f->listData()) {
+                        $this->current_row[$field] = $values[$v];
+                    }
                 }
             }
 

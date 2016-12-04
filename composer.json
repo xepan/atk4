@@ -2,12 +2,27 @@
     "name": "xepan/atk4",
     "description": "atk4/atk4 fork",
     "type": "library",
-    "version": "4.3.2",
     "license": "MIT",
-    "keywords": ["framework","atk4"],
+    "description": "Agile UI - User Interface Component Library",
+    "keywords": ["framework", "ui", "web", "form", "widget", "render", "gadget", "button", "grid", "crud", "atk4", "agile", "generator"],
     "homepage": "https://agiletoolkit.org/",
+    "authors": [
+        {
+            "name": "Romans Malinovskis",
+            "email": "romans@agiletoolkit.org",
+            "homepage": "https://nearly.guru/"
+        }
+    ],
     "autoload": {
         "psr-0": {"": "lib/"},
         "files": ["/lib/static.php"]
+    },
+    "require": {
+        "atk4/data": "^1.1",
+        "atk4/ui": "*"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "4.*",
+        "codeclimate/php-test-reporter": "*"
     }
 }

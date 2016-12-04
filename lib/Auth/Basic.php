@@ -4,12 +4,14 @@
  * on a page. You may have multiple Auth instances. Supports
  * 3rd party plugins.
  *
- * Use:
+ * Use like this in your App class:
  *
  * $auth=$this->add('Auth');
  * $auth->usePasswordEncryption();
  * $auth->setModel('User');
  * $auth->check();
+ *
+ * and add $this->app->auth->addEncryptionHook($this); in init method of your User model.
  *
  * Auth accessible from anywhere through $this->app->auth;
  *
@@ -61,7 +63,7 @@ class Auth_Basic extends AbstractController
     public $password_field = 'password';
 
     /**
-     * @var int Encyption algorithm
+     * @var int Encryption algorithm
      */
     public $hash_algo = PASSWORD_DEFAULT;
 
@@ -120,12 +122,12 @@ class Auth_Basic extends AbstractController
         }
         /** @type Model $m */
         $m = $this->add('Model');
+        $m->id_field = $this->login_field;
         $m->setSource('Array', array(
                 is_array($user)
                 ? $user
                 : array($this->login_field => $user, $this->password_field => $pass)
             ));
-        $m->id_field = $this->login_field;
         $this->setModel($m);
 
         return $this;
@@ -143,18 +145,35 @@ class Auth_Basic extends AbstractController
      *
      * @return Model
      */
-    public function setModel($model, $login_field = 'email', $password_field = 'password')
+    public function setModel($model, $login_field = null, $password_field = null)
     {
         parent::setModel($model);
-        $this->login_field = $login_field;
-        $this->password_field = $password_field;
+
+        // Set login field and password field or use default ones
+        if ($login_field !== null) {
+            $this->login_field = $login_field;
+        }
+        if ($password_field !== null) {
+            $this->password_field = $password_field;
+        }
 
         // Load model from session
         if ($this->info && $this->recall('id')) {
             if ($this->recall('class', false) == get_class($this->model)) {
                 $this->debug('Loading model from cache');
-                $this->model->set($this->info);
-                $this->model->dirty = array();
+
+                if ($this->model instanceof \atk4\data\Model) {
+                    $this->model->unload();
+                    foreach ($this->info as $field => $value) {
+                        $f = $this->model->hasElement($field);
+                        if ($f && !$f->read_only) {
+                            $f->set($value);
+                        }
+                    }
+                } else {
+                    $this->model->set($this->info);
+                    $this->model->dirty = array();
+                }
                 $this->model->id = $this->recall('id', null);
             } else {
                 // Class changed, re-fetch data from database
@@ -229,8 +248,8 @@ class Auth_Basic extends AbstractController
 
     /**
      * Auth memorizes data about a logged-in user in session. You can either use this function to access
-     * that data or $auth->model (preferred) $auth->get('username') will always point to the login field
-     * value ofthe user regardless of how your field is named.
+     * that data or $auth->model (preferred). $auth->get('username') will always point to the login field
+     * value of the user regardless of how your field is named.
      *
      * @param string $property
      * @param mixed  $default
@@ -395,7 +414,7 @@ class Auth_Basic extends AbstractController
             return;
         }      // no authentication is required
 
-        // Check if user's session contains autentication information
+        // Check if user's session contains authentication information
         if (!$this->isLoggedIn()) {
             $this->memorizeURL();
 
@@ -411,13 +430,6 @@ class Auth_Basic extends AbstractController
                 return true;
             }
 
-            /*
-            $this->debug('User is not authenticated yet');
-
-            // No information is present. Let's see if cookie is set
-                }
-            }else $this->debug("No permanent cookie");
-             */
             $this->processLogin();
 
             return true;
@@ -462,7 +474,7 @@ class Auth_Basic extends AbstractController
     }
 
     /**
-     * This function verifies credibility of supplied authenication data.
+     * This function verifies credibility of supplied authentication data.
      * It will search based on user and verify the password. It's also
      * possible that the function will re-hash user password with
      * updated hash.
@@ -497,7 +509,7 @@ class Auth_Basic extends AbstractController
 
         // Attempt to load user data by username. If not found, return false
         /** @type Model $data User model */
-        $data = $this->model->newInstance();
+        $data = clone $this->model;
 
         $data->tryLoadBy($this->login_field, $user);
         if (!$data->loaded()) {
@@ -593,12 +605,6 @@ class Auth_Basic extends AbstractController
         $data->dirty[$this->password_field] = false;
 
         return $data[$this->model->id_field];
-
-        /*
-        if (!$password_existed) {
-            $data->getElement($this->password_field)->destroy();
-        }
-        */
     }
 
     /**
@@ -615,7 +621,7 @@ class Auth_Basic extends AbstractController
     }
 
     /**
-     * Return originalally requested URL.
+     * Return originally requested URL.
      *
      * @return string
      */
@@ -636,16 +642,7 @@ class Auth_Basic extends AbstractController
     }
 
     /**
-     * Rederect to page user tried to access before authentication was requested.
-     */
-    public function loginRedirect()
-    {
-        $this->debug('to Index');
-        $this->app->redirect($this->getURL());
-    }
-
-    /**
-     * This function is always executed after successfull login through a normal means (login form or plugin).
+     * This function is always executed after successful login through a normal means (login form or plugin).
      *
      * It will create cache model data.
      *
@@ -654,9 +651,9 @@ class Auth_Basic extends AbstractController
      */
     public function loggedIn($user = null, $pass = null)
     {
-        //$username,$password,$memorize=false){
-        $this->hook('loggedIn', array($user, $pass));
-        $this->app->redirect($this->getURL());
+        if ($this->hook('loggedIn', array($user, $pass)) !== false) {
+            $this->app->redirect($this->getURL());
+        }
     }
 
     /**
@@ -733,8 +730,8 @@ class Auth_Basic extends AbstractController
 
             if (!$user instanceof $c) {
                 throw $this->exception('Specified model with incompatible class')
-                ->addMoreInfo('required', $c)
-                ->addMoreInfo('supplied', get_class($user));
+                    ->addMoreInfo('required', $c)
+                    ->addMoreInfo('supplied', get_class($user));
             }
 
             $this->model = $user;
@@ -743,10 +740,7 @@ class Auth_Basic extends AbstractController
             return $this;
         }
 
-        $this->model->tryLoadBy($this->login_field, $user);
-        $this->memorizeModel();
-
-        return $this;
+        return $this->loginBy($this->login_field, $user);
     }
 
     /**
@@ -789,18 +783,23 @@ class Auth_Basic extends AbstractController
         $form = $page->add('Form', null, null, array('form/minimal'));
 
         /** @type Field $email */
-        $email = $this->model->hasField($this->login_field);
-        $email = $email ? $email->caption() : 'E-mail';
+        $email = $this->model->hasElement($this->login_field);
 
         /** @type Field $password */
-        $password = $this->model->hasField($this->password_field);
-        $password = $password ? $password->caption() : 'Password';
+        $password = $this->model->hasElement($this->password_field);
+
+        // set captions
+        if ($this->model instanceof \atk4\data\Model) {
+            $email = $email && isset($email->caption) ? $email->caption : 'E-mail';
+            $password = $password && isset($password->caption) ? $password->caption : 'Password';
+        } else {
+            $email = $email ? $email->caption() : 'E-mail';
+            $password = $password ? $password->caption() : 'Password';
+        }
 
         $form->addField('Line', 'username', $email);
         $form->addField('Password', 'password', $password);
         $form->addSubmit('Login')->addClass('atk-jackscrew')->addClass('atk-swatch-green');
-
-        //$form->add('View',null,'button_row_left')->addClass('atk-jackscrew');
 
         return $form;
     }
@@ -825,7 +824,7 @@ class Auth_Basic extends AbstractController
         $this->app->page_object = $p;
 
         // hook: createForm use this to build basic login form
-        $this->form = $this->hook('createForm', array($p));
+        $this->form = $this->hook('createForm', array($p))[0];
 
         // If no hook, build standard form
         if (!is_object($this->form)) {

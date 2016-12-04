@@ -1,15 +1,16 @@
 <?php
 /**
- * Connects regular grid with a model and imports fields as columns.
+ * Connects regular grid with a Agile/Data model and imports fields as columns.
  *
  * In most cases the following use is sufficient
+ * $grid = $page->add('Grid', ['default_controller' => 'ADGrid']);
  * $grid->setModel('SomeModel');
  *
- * You can use Grid only with a single Model to simplify select.
+ * You can use Grid only with a single Model.
  */
-class Controller_MVCGrid extends AbstractController
+class Controller_ADGrid extends AbstractController
 {
-    /** @var Model */
+    /** @var \atk4\data\Model */
     public $model = null;
 
     /** @var Grid */
@@ -30,8 +31,10 @@ class Controller_MVCGrid extends AbstractController
     public $type_associations = array(
         'string' => 'text',
         'int' => 'number',
+        'integer' => 'number',
         'numeric' => 'number',
         'real' => 'real',
+        'float' => 'real',
         'money' => 'money',
         'text' => 'shorttext',
         'reference' => 'text',
@@ -39,6 +42,7 @@ class Controller_MVCGrid extends AbstractController
         'datetime' => 'timestamp',
         'date' => 'date',
         'daytime' => 'time',
+        'time' => 'time',
         'boolean' => 'boolean',
         'list' => 'text',
         'radio' => 'text',
@@ -46,12 +50,27 @@ class Controller_MVCGrid extends AbstractController
         'image' => 'text',
         'file' => 'reference',
         'password' => 'password',
+        'array' => 'json',
+        'struct' => 'json', // deprecated, used in older versions of AD
+        'object' => 'json',
     );
 
     /** @var Grid */
     public $owner;
 
 
+
+    /**
+     * Initialization.
+     */
+    public function init()
+    {
+        parent::init();
+
+        if (! $this->owner->model instanceof \atk4\data\Model) {
+            throw $this->exception('Controller_ADGrid can only be used with Agile Data \atk4\data\Model models');
+        }
+    }
 
     /**
      * Adds additional type association.
@@ -71,15 +90,14 @@ class Controller_MVCGrid extends AbstractController
      */
     public function setActualFields($fields)
     {
-        if ($this->owner->model->hasMethod('getActualFields')) {
-            $this->importFields($this->owner->model, $fields);
-        }
+        /** @type \atk4\data\Model $this->owner->model */
+        $this->importFields($this->owner->model, $fields);
     }
 
     /**
-     * Import model fields in form.
+     * Import model fields in grid.
      *
-     * @param Model $model
+     * @param \atk4\data\Model $model
      * @param array|string|bool $fields
      *
      * @return void|$this
@@ -94,18 +112,31 @@ class Controller_MVCGrid extends AbstractController
         }
 
         if (!$fields) {
-            $fields = 'visible';
+            if ($model->only_fields) {
+                $fields = $model->only_fields;
+            } else {
+                $fields = [];
+                // get all field-elements
+                foreach ($model->elements as $field => $f_object) {
+                    if ($f_object instanceof \atk4\data\Field
+                        && $f_object->isVisible()
+                        && !$f_object->isHidden()
+                    ) {
+                        $fields[] = $field;
+                    }
+                }
+            }
         }
+
         if (!is_array($fields)) {
-            // note: $fields parameter only useful if model is SQL_Model
-            $fields = $model->getActualFields($fields);
+            $fields = [$fields];
         }
 
         // import fields one by one
         foreach ($fields as $field) {
             $this->importField($field);
         }
-        $model->setActualFields($fields);
+        $model->onlyFields($fields);
 
         return $this;
     }
@@ -120,27 +151,21 @@ class Controller_MVCGrid extends AbstractController
     public function importField($field)
     {
         $field = $this->model->hasElement($field);
-        if (!$field) {
+        /** @type \atk4\data\Field $field */
+
+        if (!$field || !$field->isVisible() || $field->isHidden()) {
             return;
         }
-        /** @type Field $field */
 
         $field_name = $field->short_name;
-
-        if ($field instanceof Field_Reference) {
-            $field_name = $field->getDereferenced();
-        }
-
         $field_type = $this->getFieldType($field);
-
-        /** @type string $field_caption */
-        $field_caption = $field->caption();
+        $field_caption = isset($field->ui['caption']) ? $field->ui['caption'] : null;
 
         $this->field_associations[$field_name] = $field;
 
         $column = $this->owner->addColumn($field_type, $field_name, $field_caption);
 
-        if ($field->sortable() && $column->hasMethod('makeSortable')) {
+        if (isset($field->ui['sortable']) && $field->ui['sortable'] && $column->hasMethod('makeSortable')) {
             $column->makeSortable();
         }
 
@@ -152,33 +177,33 @@ class Controller_MVCGrid extends AbstractController
      *
      * Redefine this method to add special handling of your own fields.
      *
-     * @param Field $field
+     * @param \atk4\data\Field $field
      *
      * @return string
      */
     public function getFieldType($field)
     {
         // default column type
-        $type = $field->type();
+        $type = $field->type;
 
-        // try to find associated form field type
+        // try to find associated field type
         if (isset($this->type_associations[$type])) {
             $type = $this->type_associations[$type];
         }
 
-        if ($type == 'text' && $field->allowHtml()) {
+        if ($type == 'text' && isset($field->allowHtml) && $field->allowHtml) {
             $type = 'html';
         }
 
         // if grid column type/formatter explicitly set in model
-        if ($field->display()) {
+        if (isset($field->ui['display'])) {
             // @todo this is wrong and obsolete, as hasOne uses display for way different purpose
 
-            $tmp = $field->display();
-            if (is_array($tmp)) {
+            $tmp = $field->ui['display'];
+            if (isset($tmp['grid'])) {
                 $tmp = $tmp['grid'];
             }
-            if ($tmp) {
+            if (is_string($tmp) && $tmp) {
                 $type = $tmp;
             }
         }

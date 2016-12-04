@@ -74,9 +74,6 @@ class Form_Basic extends View implements ArrayAccess
      */
     protected $get_field = null;
 
-    /** @var array */
-    protected $conditions = array();
-
     /** @var string JS widget name */
     public $js_widget = 'ui.atk4_form';
 
@@ -321,7 +318,7 @@ class Form_Basic extends View implements ArrayAccess
      * @param Model $model
      * @param array|string|bool $fields
      */
-    public function importFields($model, $fields = UNDEFINED)
+    public function importFields($model, $fields = null)
     {
         /** @type Controller_MVCForm $c */
         $c = $this->add($this->default_controller);
@@ -503,7 +500,6 @@ class Form_Basic extends View implements ArrayAccess
             foreach ($this->elements as $short_name => $element) {
                 if ($element instanceof Form_Field) {
                     if (!$element->no_save) {
-                        //if(is_null($element->get()))
                         $m->set($short_name, $element->get());
                     }
                 }

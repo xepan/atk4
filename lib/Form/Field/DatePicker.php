@@ -58,12 +58,18 @@ class Form_Field_DatePicker extends Form_Field_Line
             return parent::set(date('Y-m-d', $value));
         }
 
+        if ($value instanceof \DateTime) {
+            $value->setTimezone(new \DateTimeZone($this->app->getConfig('timezone', 'UTC')));
+            return parent::set($value->format('Y-m-d'));
+        }
+
         return parent::set($this->convertDate($value, null, 'Y-m-d'));
     }
 
     public function get()
     {
         $value = parent::get();
+
         // date cannot be empty string
         if ($value == '') {
             return;
@@ -87,18 +93,18 @@ class Form_Field_DatePicker extends Form_Field_Line
             return null;
         }
         if ($from === null) {
-            $from = $this->app->gcetConfig('locale/date', null);
+            $from = $this->app->getConfig('locale/date', null);
         }
         if ($from === null) {
             // no format configured, so use our best guess. Will work with Y-m-d
             $date = new DateTime($date);
-        }else{
+        } else {
             $date = date_create_from_format($from, (string) $date);
         }
         if ($to === null) {
             $to = $this->app->getConfig('locale/date', 'Y-m-d');
         }
-        
+
         if ($date === false) {
             throw $this->exception('Date format is not correct');
         }
