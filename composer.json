@@ -1,0 +1,13 @@
+{
+    "name": "xepan/atk4",
+    "type": "library",
+    "description": "fork from atk4/atk4",
+    "version": "4.3.0",
+    "license": "MIT",
+    "keywords": ["framework","atk4"],
+    "homepage": "https://agiletoolkit.org/",
+    "autoload": {
+        "psr-0": {"": "lib/"},
+        "files": ["/lib/static.php"]
+    }
+}
