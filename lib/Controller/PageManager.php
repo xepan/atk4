@@ -160,8 +160,6 @@ class Controller_PageManager extends AbstractController {
             $this->page = $page;
         }else{
             $request_uri=$this->getRequestURI();
-            
-            if($path !=='/') $path = rtrim($path,'/');
 
             if(strpos($request_uri,$path)!==0){
                 throw $this->exception("URL matching problem")
@@ -213,6 +211,7 @@ class Controller_PageManager extends AbstractController {
             throw new BaseException('Unable to determine RequestURI. This shouldn\'t be called at all in CLI');
         }
         $request_uri=explode('?',$request_uri,2);
+        if(substr($request_uri[0],-1)!='/') $request_uri[0].='/';
         return $request_uri[0];
     }
     function unix_dirname($path){
