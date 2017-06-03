@@ -160,7 +160,7 @@ class Controller_PageManager extends AbstractController {
             $this->page = $page;
         }else{
             $request_uri=$this->getRequestURI();
-            if(strpos($request_uri,$path)!==0){
+            if(strpos(trim($request_uri,'/'),trim($path,'/'))!==0){
                 throw $this->exception("URL matching problem")
                     ->addMoreInfo('RequestURI',$request_uri)
                     ->addMoreInfo('BasePath',$path);
