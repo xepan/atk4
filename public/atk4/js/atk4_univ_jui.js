@@ -14,7 +14,8 @@ $.each({
         $.data(dialog.get(0),'opener',this.jquery);
         $.data(dialog.get(0),'options',options);
         $(window).resize(function() {
-            dialog.dialog("option", "position", {my: "center", at: "center", of: window});
+            if(dialog.is(':data(dialog)'))
+                dialog.dialog("option", "position", {my: "center", at: "center", of: window});
         });
 
         return dialog;
