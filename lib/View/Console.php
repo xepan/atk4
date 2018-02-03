@@ -116,7 +116,7 @@ class View_Console extends \View {
             header('Content-Type: text/event-stream');
             header('Cache-Control: no-cache');
             header('Cache-Control: private');
-            header('Content-Encoding: none;');
+            header('Content-Encoding: none');
             header("Pragma: no-cache");
             $this->destruct_send=true;
 
