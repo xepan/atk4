@@ -225,7 +225,15 @@ class CompleteLister extends Lister
      */
     function render()
     {
-        $this->renderRows();
+        try{
+            $this->renderRows();
+            
+        }catch(\Exception_StopRender $e){
+
+        }catch(\Exception $e){
+            $this->output($e->getHTML());
+            return;
+        }
         $this->output($this->template->render());
     }
 
