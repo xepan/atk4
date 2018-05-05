@@ -230,8 +230,11 @@ class CompleteLister extends Lister
             
         }catch(\Exception_StopRender $e){
 
-        }catch(\Exception $e){
+        }catch(\BaseException $e){
             $this->output($e->getHTML());
+            return;
+        }catch(\Exception $e){
+            $this->output($e->getMessage());
             return;
         }
         $this->output($this->template->render());
