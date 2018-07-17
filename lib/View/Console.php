@@ -108,7 +108,7 @@ class View_Console extends \View {
 
     private $destruct_send = false;
     function __destruct(){
-        if($this->destruct_send)$this->out('--[ <i class="icon-ok"></i> DONE ]--------');
+        if($this->destruct_send)$this->out('--[ <i class="fa fa-thumbs-up"></i> DONE ]--------');
     }
 
     function render(){
@@ -124,7 +124,7 @@ class View_Console extends \View {
             if (ob_get_level()) ob_end_clean();
 
 
-            $this->out('--[ <i class="icon-spinner"></i> Executing... ]--------');
+            $this->out('--[ <i class="fa fa-spinner fa-spin"></i> Executing... ]--------');
             // If the process is running, it will have
             // stdout we can read:
             if($this->process){
