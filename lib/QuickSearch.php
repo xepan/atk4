@@ -20,8 +20,8 @@ class QuickSearch extends Filter
 {
 
     // icons
-    public $submit_icon = 'ui-icon-search';
-    public $cancel_icon = 'ui-icon-cancel';
+    public $submit_icon = 'fa fa-search';
+    public $cancel_icon = 'icon-cancel';
 
     // field
     public $search_field;
@@ -61,7 +61,7 @@ class QuickSearch extends Filter
                 ->setElement('A')
 	            ->setAttr('href','javascript:void(0)')
                 ->setClass('atk-button')
-                ->setHtml('<span class="icon-cancel atk-swatch-red"></span>')
+                ->setHtml('<span class="'.$this->cancel_icon.' atk-swatch-red"></span>')
                 ->js('click', array(
                     $this->search_field->js()->val(null),
                     $this->js()->submit()
@@ -73,7 +73,7 @@ class QuickSearch extends Filter
             ->setElement('A')
 	        ->setAttr('href','javascript:void(0)')
             ->setClass('atk-button')
-            ->setHtml('<span class="icon-search"></span>')
+            ->setHtml('<span class="'.$this->submit_icon.'"></span>')
             ->js('click', $this->js()->submit());
     }
 
